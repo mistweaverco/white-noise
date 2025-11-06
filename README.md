@@ -1,5 +1,12 @@
-# rain-webapp
+<div align="center">
 
-## Credits
+![Logo](assets/logo.svg)
 
-(Fav-)Icon made by [Freepik](https://www.flaticon.com/authors/freepik) from [www.flaticon.com](https://www.flaticon.com).
+# White noise
+
+A minimalistic website that generates white noise to help you
+focus, relax, or sleep.
+
+<p></p>
+
+</div>
