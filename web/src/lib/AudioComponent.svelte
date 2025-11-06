@@ -163,9 +163,10 @@
 					{#each audioAssets as asset, assetIdx}
 						<div class="tooltip" data-tip={asset.name}>
 							<button
-								class="btn {audioPlayersPlaybackStates[assetIdx] === AudioAssetPlaybackState.PAUSED
+								class="btn btn-circle {audioPlayersPlaybackStates[assetIdx] ===
+								AudioAssetPlaybackState.PAUSED
 									? 'btn-soft'
-									: 'btn-active'}"
+									: 'btn-outline btn-success bg-gray-700'}"
 								on:click={() => toggleAudio(assetIdx)}
 							>
 								{asset.icons.string}
