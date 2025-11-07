@@ -3,6 +3,13 @@
 	import HeadComponent from '$lib/HeadComponent.svelte';
 	import AudioComponent from '$lib/AudioComponent.svelte';
 	import { getCommitDate, getCommitHash, getCommitHashShort, getRepoURL } from '$lib';
+	import { dev, browser } from '$app/environment';
+
+	if (browser && 'serviceWorker' in navigator) {
+		navigator.serviceWorker.register('/service-worker.js', {
+			type: dev ? 'module' : 'classic'
+		});
+	}
 </script>
 
 <HeadComponent
