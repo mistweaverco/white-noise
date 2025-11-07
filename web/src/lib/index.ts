@@ -13,3 +13,5 @@ export const getRepoURL = (): string => {
 export const getCommitHash = (): string => {
 	return __COMMIT_HASH__;
 };
+
+export { Logger } from './Logger';

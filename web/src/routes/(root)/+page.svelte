@@ -24,10 +24,11 @@
 			<AudioComponent />
 			<div class="mt-10">
 				<p class="text-sm text-gray-500">
-					📌 <a class="link" href="{getRepoURL()}/commit/{getCommitHash()}"
+					Build 📌 <a class="link" href="{getRepoURL()}/commit/{getCommitHash()}"
 						>{getCommitHashShort()}</a
 					>
-					📅 {getCommitDate()}
+					📅 {getCommitDate()} - made with ❤️ by
+					<a class="link" href="{getRepoURL()}/contributors">humans.</a>
 				</p>
 			</div>
 		</div>
