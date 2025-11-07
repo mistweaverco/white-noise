@@ -6,7 +6,11 @@ enum AudioAssetURL {
 	THUNDERSTORM_A = 'assets/audio/thunderstorm-a.ogg',
 	THUNDERSTORM_B = 'assets/audio/thunderstorm-b.ogg',
 	RAIN_A = 'assets/audio/rain-a.ogg',
-	RAIN_B = 'assets/audio/rain-b.ogg'
+	RAIN_B = 'assets/audio/rain-b.ogg',
+	LIGHT_RAIN_A = 'assets/audio/light-rain-a.ogg',
+	LIGHT_RAIN_B = 'assets/audio/light-rain-b.ogg',
+	HEAVY_RAIN_A = 'assets/audio/heavy-rain-a.ogg',
+	HEAVY_RAIN_B = 'assets/audio/heavy-rain-b.ogg'
 }
 
 export enum AudioAssetID {
@@ -115,6 +119,22 @@ const audioAssets: AudioAsset[] = [
 			},
 			{
 				url: AudioAssetURL.RAIN_B,
+				type: AudioAssetType.AUDIO_OGG
+			},
+			{
+				url: AudioAssetURL.HEAVY_RAIN_A,
+				type: AudioAssetType.AUDIO_OGG
+			},
+			{
+				url: AudioAssetURL.HEAVY_RAIN_B,
+				type: AudioAssetType.AUDIO_OGG
+			},
+			{
+				url: AudioAssetURL.LIGHT_RAIN_A,
+				type: AudioAssetType.AUDIO_OGG
+			},
+			{
+				url: AudioAssetURL.LIGHT_RAIN_B,
 				type: AudioAssetType.AUDIO_OGG
 			}
 		],
