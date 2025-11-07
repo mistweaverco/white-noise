@@ -1,0 +1,23 @@
+{
+	"theme_color": "#8936FF",
+	"background_color": "#2EC6FE",
+	"icons": [
+		{
+			"purpose": "maskable",
+			"sizes": "512x512",
+			"src": "icon512_maskable.png",
+			"type": "image/png"
+		},
+		{ "purpose": "any", "sizes": "512x512", "src": "icon512_rounded.png", "type": "image/png" }
+	],
+	"orientation": "any",
+	"display": "standalone",
+	"dir": "auto",
+	"lang": "en-US",
+	"name": "White Noise",
+	"short_name": "White Noise",
+	"scope": "https://white-noise.mwco.app/",
+	"start_url": "https://white-noise.mwco.app/",
+	"description": "A simple application that generates soothing white noise to help you focus, relax, and sleep better.",
+	"id": "https://white-noise.mwco.app/"
+}
