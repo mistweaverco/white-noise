@@ -21,8 +21,9 @@ export enum AudioAssetID {
 }
 
 export enum AudioAssetPlaybackState {
-	PAUSED = 'paused',
-	PLAYING = 'playing'
+	STOPPED = 'stopped',
+	PLAYING = 'playing',
+	PAUSED = 'paused'
 }
 
 enum AudioAssetType {
