@@ -139,19 +139,21 @@
 		}
 	};
 
-	const toggleAudio = (assetIdx: number) => {
+	const toggleAudio = (assetIdx: number, stop: boolean = true) => {
 		const files = audioAssets[assetIdx].files;
 		const filesCount = files.length;
-		const fileIdxToggleNow = getRandomInt(0, filesCount - 1);
+		const fileIdxsToggleNow = getRandomInt(0, filesCount - 1);
 		const fileIdxsToggleLater =
-			filesCount > 1 ? [...Array(filesCount).keys()].filter((idx) => idx !== fileIdxToggleNow) : [];
+			filesCount > 1
+				? [...Array(filesCount).keys()].filter((idx) => idx !== fileIdxsToggleNow)
+				: [];
 		if (
 			audioPlayersPlaybackStates[assetIdx] === AudioAssetPlaybackState.STOPPED ||
 			audioPlayersPlaybackStates[assetIdx] === AudioAssetPlaybackState.PAUSED
 		) {
-			const audio = getAudioElement(assetIdx, fileIdxToggleNow);
+			const audio = getAudioElement(assetIdx, fileIdxsToggleNow);
 			audio.play();
-			Logger.info('▶️ Playing audio asset:', files[fileIdxToggleNow], '🎵 audio tag:', audio);
+			Logger.info('▶️ Playing audio asset:', files[fileIdxsToggleNow], '🎵 audio tag:', audio);
 			// Clear any scheduled plays for this asset
 			clearAudioPlaySchedulesForAsset(assetIdx);
 			for (let i = fileIdxsToggleLater.length - 1; i >= 0; i--) {
@@ -188,7 +190,10 @@
 				const a = getAudioElement(assetIdx, fileIdx);
 				// Clear any scheduled plays for this asset file
 				clearAudioPlaySchedulesForAssetFile(assetIdx, fileIdx);
-				if (!a.paused) {
+				if (!a.paused && audioPlayersPlaybackStates[assetIdx] === AudioAssetPlaybackState.PLAYING) {
+					if (stop) {
+						a.currentTime = 0;
+					}
 					a.pause();
 					Logger.info('⏸️ Pausing audio asset:', files[fileIdx], '🎵 audio tag:', a);
 				}
@@ -196,18 +201,30 @@
 		}
 	};
 
+	let audioEventsAdded = false;
+
 	const addAudioEventListeners = () => {
+		if (audioEventsAdded) return;
 		for (let i = audioElements.length - 1; i >= 0; i--) {
 			const audio = audioElements[i];
 			audio.addEventListener('play', () => {
+				Logger.info('▶️ Audio play event detected for audio tag:', audio);
 				const assetIdx = parseInt(audio.getAttribute('data-asset-idx') || '-1', 10);
 				audioPlayersPlaybackStates[assetIdx] = AudioAssetPlaybackState.PLAYING;
 			});
 			audio.addEventListener('pause', () => {
+				Logger.info('⏸️ Audio pause event detected for audio tag:', audio);
 				const assetIdx = parseInt(audio.getAttribute('data-asset-idx') || '-1', 10);
-				audioPlayersPlaybackStates[assetIdx] = AudioAssetPlaybackState.PAUSED;
+				if (audio.currentTime === 0) {
+					Logger.info('⏹️ Audio stopped (currentTime is 0) for audio tag:', audio);
+					audioPlayersPlaybackStates[assetIdx] = AudioAssetPlaybackState.STOPPED;
+				} else {
+					Logger.info('⏸️ Audio paused for audio tag:', audio);
+					audioPlayersPlaybackStates[assetIdx] = AudioAssetPlaybackState.PAUSED;
+				}
 			});
 		}
+		audioEventsAdded = true;
 	};
 
 	const restoreSettings = () => {
@@ -266,19 +283,14 @@
 		return platform.includes('Mac');
 	};
 
-	const togglePauseAllAudio = (): void => {
+	const togglePauseAudioPlayback = (): void => {
 		if (!browser) return;
 		for (let assetIdx = audioPlayersPlaybackStates.length - 1; assetIdx >= 0; assetIdx--) {
 			const audioState = audioPlayersPlaybackStates[assetIdx];
 			switch (audioState) {
 				case AudioAssetPlaybackState.PAUSED:
 				case AudioAssetPlaybackState.PLAYING:
-					toggleAudio(assetIdx);
-				case AudioAssetPlaybackState.PAUSED:
-					audioPlayersPlaybackStates[assetIdx] = AudioAssetPlaybackState.PLAYING;
-					break;
-				case AudioAssetPlaybackState.PLAYING:
-					audioPlayersPlaybackStates[assetIdx] = AudioAssetPlaybackState.PAUSED;
+					toggleAudio(assetIdx, false);
 					break;
 				default:
 					break;
@@ -354,7 +366,7 @@
 				return;
 			}
 			Logger.info('⏸️ Escape key pressed - toggle all audio');
-			togglePauseAllAudio();
+			togglePauseAudioPlayback();
 		}
 
 		if (omniMenuOpen === false && metaKey && event.key === 'k') {
@@ -375,9 +387,16 @@
 				event.preventDefault();
 				const activeElement = document.activeElement;
 				if (activeElement === omniMenuInputFieldSearch) {
+					Logger.info(
+						'🔍 Enter key pressed while focus is on input field - focusing first action button'
+					);
+					Logger.info('👀 Filtered actions:', omniMenuFilteredActionsListButtons);
 					// If focus is on input field, focus the first action button
 					if (omniMenuFilteredActionsListButtons.length > 0) {
-						omniMenuFilteredActionsListButtons[0].click();
+						Logger.info('👉 Focusing first action button:', omniMenuFilteredActionsListButtons[0]);
+						omniMenuFilteredActionsListButtons[0].dispatchEvent(
+							new Event('click', { bubbles: true, cancelable: true, composed: false })
+						);
 					}
 					return;
 				}
@@ -386,8 +405,9 @@
 						const action = omniMenuFilteredActions[idx];
 						if (action) {
 							Logger.info('⚡ Triggering omni menu action via Enter key:', action.name);
-							action.action();
-							omniMenuOpen = false;
+							omniMenuFilteredActionsListButtons[idx].dispatchEvent(
+								new Event('click', { bubbles: true, cancelable: true, composed: false })
+							);
 						}
 					}
 				});
@@ -445,19 +465,24 @@
 		}
 	};
 
+	let globalKeypressListenerAdded = false;
 	const addGlobalKeypressListener = () => {
 		if (!browser) return;
+		if (globalKeypressListenerAdded) return;
 		window.addEventListener('keydown', handleKeypress);
+		globalKeypressListenerAdded = true;
 	};
 
+	let omniMenuActionsAdded = false;
 	const addOmniMenuActions = (): void => {
+		if (omniMenuActionsAdded) return;
 		omniMenuActions = [
 			{
 				name: 'Toggle play/pause',
 				icon: 'pause',
 				description: 'Toggle play/pause for all audio tracks',
 				action: () => {
-					togglePauseAllAudio();
+					togglePauseAudioPlayback();
 				}
 			},
 			{
@@ -474,6 +499,7 @@
 				}
 			}
 		];
+		omniMenuActionsAdded = true;
 	};
 
 	const omniMenuActionTrigger = (evt: Event): void => {
