@@ -24,6 +24,7 @@
 	let omniMenuInputFieldSearch: HTMLInputElement | null = $state(null);
 	let isAudioSupported: boolean | null = $state(null);
 	let audioPlayersPlaybackStates: AudioAssetPlaybackState[] = $state([]);
+	let audioAssetsShouldPlay: boolean[] = $state([]);
 	let volumeElement: HTMLInputElement | null = $state(null);
 	const audioAssets = getAudioAssets();
 
@@ -139,75 +140,177 @@
 		}
 	};
 
-	const toggleAudio = (assetIdx: number) => {
-		const files = audioAssets[assetIdx].files;
-		const filesCount = files.length;
-		const fileIdxToggleNow = getRandomInt(0, filesCount - 1);
-		const fileIdxsToggleLater =
-			filesCount > 1 ? [...Array(filesCount).keys()].filter((idx) => idx !== fileIdxToggleNow) : [];
-		if (
-			audioPlayersPlaybackStates[assetIdx] === AudioAssetPlaybackState.STOPPED ||
-			audioPlayersPlaybackStates[assetIdx] === AudioAssetPlaybackState.PAUSED
-		) {
-			const audio = getAudioElement(assetIdx, fileIdxToggleNow);
-			audio.play();
-			Logger.info('▶️ Playing audio asset:', files[fileIdxToggleNow], '🎵 audio tag:', audio);
-			// Clear any scheduled plays for this asset
-			clearAudioPlaySchedulesForAsset(assetIdx);
-			for (let i = fileIdxsToggleLater.length - 1; i >= 0; i--) {
-				const fileIdx = fileIdxsToggleLater[i];
-				const delay = getRandomDelay();
-				Logger.info(
-					`⏱️ Scheduling play for audio asset:`,
-					audioAssets[assetIdx].files[fileIdx],
-					`after delay of ${delay} ms`
-				);
-				audioPlaySchedules.push({
-					assetIdx,
-					fileIdx,
-					timeoutId: setTimeout(() => {
-						const a = getAudioElement(assetIdx, fileIdx);
-						a.play();
-						Logger.info(
-							'▶️ Playing audio asset:',
-							audioAssets[assetIdx].files[fileIdx],
-							'🎵 audio tag:',
-							a
-						);
-						Logger.info(
-							'🗑️ Removing scheduled self',
-							audioPlaySchedules[audioPlaySchedules.length - 1]
-						);
-						audioPlaySchedules.splice(audioPlaySchedules.length - 1, 1);
-					}, delay)
-				});
-			}
-		} else {
-			for (let i = filesCount - 1; i >= 0; i--) {
-				const fileIdx = i;
-				const a = getAudioElement(assetIdx, fileIdx);
-				// Clear any scheduled plays for this asset file
-				clearAudioPlaySchedulesForAssetFile(assetIdx, fileIdx);
-				if (!a.paused) {
-					a.pause();
-					Logger.info('⏸️ Pausing audio asset:', files[fileIdx], '🎵 audio tag:', a);
-				}
-			}
+	const removeAudioPlayScheduleByTimeoutId = (timeoutId: number): void => {
+		const idx = audioPlaySchedules.findIndex((schedule) => schedule.timeoutId === timeoutId);
+		if (idx !== -1) {
+			audioPlaySchedules.splice(idx, 1);
 		}
 	};
 
+	const setAssetPlaybackStateFromElements = (assetIdx: number): void => {
+		const filesCount = audioAssets[assetIdx].files.length;
+		let hasPlayingAudio = false;
+		let hasAudioProgress = false;
+		for (let fileIdx = filesCount - 1; fileIdx >= 0; fileIdx--) {
+			const audio = getAudioElement(assetIdx, fileIdx);
+			if (!audio.paused) {
+				hasPlayingAudio = true;
+				break;
+			}
+			if (audio.currentTime > 0) {
+				hasAudioProgress = true;
+			}
+		}
+		if (hasPlayingAudio) {
+			audioPlayersPlaybackStates[assetIdx] = AudioAssetPlaybackState.PLAYING;
+			return;
+		}
+		audioPlayersPlaybackStates[assetIdx] = hasAudioProgress
+			? AudioAssetPlaybackState.PAUSED
+			: AudioAssetPlaybackState.STOPPED;
+	};
+
+	const getAssetPlaybackSnapshot = (
+		assetIdx: number
+	): { isPlayingNow: boolean; hasProgress: boolean; isActive: boolean } => {
+		const filesCount = audioAssets[assetIdx].files.length;
+		let isPlayingNow = false;
+		let hasProgress = false;
+
+		for (let fileIdx = filesCount - 1; fileIdx >= 0; fileIdx--) {
+			const audio = getAudioElement(assetIdx, fileIdx);
+			if (!(audio instanceof HTMLAudioElement)) {
+				continue;
+			}
+			if (!audio.paused) {
+				isPlayingNow = true;
+				break;
+			}
+			if (audio.currentTime > 0) {
+				hasProgress = true;
+			}
+		}
+
+		return {
+			isPlayingNow,
+			hasProgress,
+			isActive: isPlayingNow || hasProgress || !!audioAssetsShouldPlay[assetIdx]
+		};
+	};
+
+	const playAudioElement = (audio: HTMLAudioElement, assetIdx: number, fileIdx: number): void => {
+		const playPromise = audio.play();
+		if (playPromise && typeof playPromise.catch === 'function') {
+			playPromise.catch((err) => {
+				Logger.warn(
+					'⚠️ Failed to play audio asset:',
+					audioAssets[assetIdx].files[fileIdx],
+					'Error:',
+					err
+				);
+			});
+		}
+	};
+
+	const startAssetPlayback = (assetIdx: number): void => {
+		const files = audioAssets[assetIdx].files;
+		const filesCount = files.length;
+		const fileIdxsToggleNow = getRandomInt(0, filesCount - 1);
+		const fileIdxsToggleLater =
+			filesCount > 1
+				? [...Array(filesCount).keys()].filter((idx) => idx !== fileIdxsToggleNow)
+				: [];
+
+		audioAssetsShouldPlay[assetIdx] = true;
+		clearAudioPlaySchedulesForAsset(assetIdx);
+
+		const audio = getAudioElement(assetIdx, fileIdxsToggleNow);
+		playAudioElement(audio, assetIdx, fileIdxsToggleNow);
+		Logger.info('▶️ Playing audio asset:', files[fileIdxsToggleNow], '🎵 audio tag:', audio);
+
+		for (let i = fileIdxsToggleLater.length - 1; i >= 0; i--) {
+			const fileIdx = fileIdxsToggleLater[i];
+			const delay = getRandomDelay();
+			Logger.info(
+				`⏱️ Scheduling play for audio asset:`,
+				audioAssets[assetIdx].files[fileIdx],
+				`after delay of ${delay} ms`
+			);
+			const timeoutId = setTimeout(() => {
+				removeAudioPlayScheduleByTimeoutId(timeoutId);
+				if (!audioAssetsShouldPlay[assetIdx]) {
+					Logger.info(
+						'🚫 Skipping scheduled play because asset is paused/stopped:',
+						audioAssets[assetIdx].files[fileIdx]
+					);
+					return;
+				}
+				const scheduledAudio = getAudioElement(assetIdx, fileIdx);
+				playAudioElement(scheduledAudio, assetIdx, fileIdx);
+				Logger.info(
+					'▶️ Playing audio asset:',
+					audioAssets[assetIdx].files[fileIdx],
+					'🎵 audio tag:',
+					scheduledAudio
+				);
+			}, delay);
+			audioPlaySchedules.push({
+				assetIdx,
+				fileIdx,
+				timeoutId
+			});
+		}
+	};
+
+	const pauseAssetPlayback = (assetIdx: number, stop: boolean): void => {
+		const files = audioAssets[assetIdx].files;
+		const filesCount = files.length;
+
+		audioAssetsShouldPlay[assetIdx] = false;
+		clearAudioPlaySchedulesForAsset(assetIdx);
+
+		for (let i = filesCount - 1; i >= 0; i--) {
+			const fileIdx = i;
+			const audio = getAudioElement(assetIdx, fileIdx);
+			clearAudioPlaySchedulesForAssetFile(assetIdx, fileIdx);
+			if (stop) {
+				audio.currentTime = 0;
+			}
+			audio.pause();
+			Logger.info('⏸️ Pausing audio asset:', files[fileIdx], '🎵 audio tag:', audio);
+		}
+		audioPlayersPlaybackStates[assetIdx] = stop
+			? AudioAssetPlaybackState.STOPPED
+			: AudioAssetPlaybackState.PAUSED;
+	};
+
+	const toggleAudio = (assetIdx: number, stop: boolean = true) => {
+		if (audioAssetsShouldPlay[assetIdx]) {
+			pauseAssetPlayback(assetIdx, stop);
+			return;
+		}
+		startAssetPlayback(assetIdx);
+	};
+
+	let audioEventsAdded = false;
+
 	const addAudioEventListeners = () => {
+		if (audioEventsAdded) return;
 		for (let i = audioElements.length - 1; i >= 0; i--) {
 			const audio = audioElements[i];
 			audio.addEventListener('play', () => {
+				Logger.info('▶️ Audio play event detected for audio tag:', audio);
 				const assetIdx = parseInt(audio.getAttribute('data-asset-idx') || '-1', 10);
+				audioAssetsShouldPlay[assetIdx] = true;
 				audioPlayersPlaybackStates[assetIdx] = AudioAssetPlaybackState.PLAYING;
 			});
 			audio.addEventListener('pause', () => {
+				Logger.info('⏸️ Audio pause event detected for audio tag:', audio);
 				const assetIdx = parseInt(audio.getAttribute('data-asset-idx') || '-1', 10);
-				audioPlayersPlaybackStates[assetIdx] = AudioAssetPlaybackState.PAUSED;
+				setAssetPlaybackStateFromElements(assetIdx);
 			});
 		}
+		audioEventsAdded = true;
 	};
 
 	const restoreSettings = () => {
@@ -266,23 +369,29 @@
 		return platform.includes('Mac');
 	};
 
-	const togglePauseAllAudio = (): void => {
+	const togglePauseAudioPlayback = (): void => {
 		if (!browser) return;
+		const activeAssetIdxs: number[] = [];
+		let hasAnyPlayingAsset = false;
+
 		for (let assetIdx = audioPlayersPlaybackStates.length - 1; assetIdx >= 0; assetIdx--) {
-			const audioState = audioPlayersPlaybackStates[assetIdx];
-			switch (audioState) {
-				case AudioAssetPlaybackState.PAUSED:
-				case AudioAssetPlaybackState.PLAYING:
-					toggleAudio(assetIdx);
-				case AudioAssetPlaybackState.PAUSED:
-					audioPlayersPlaybackStates[assetIdx] = AudioAssetPlaybackState.PLAYING;
-					break;
-				case AudioAssetPlaybackState.PLAYING:
-					audioPlayersPlaybackStates[assetIdx] = AudioAssetPlaybackState.PAUSED;
-					break;
-				default:
-					break;
+			const playback = getAssetPlaybackSnapshot(assetIdx);
+			if (!playback.isActive) {
+				continue;
 			}
+			activeAssetIdxs.push(assetIdx);
+			if (playback.isPlayingNow) {
+				hasAnyPlayingAsset = true;
+			}
+		}
+
+		for (let i = activeAssetIdxs.length - 1; i >= 0; i--) {
+			const assetIdx = activeAssetIdxs[i];
+			if (hasAnyPlayingAsset) {
+				pauseAssetPlayback(assetIdx, false);
+				continue;
+			}
+			startAssetPlayback(assetIdx);
 		}
 	};
 
@@ -354,7 +463,7 @@
 				return;
 			}
 			Logger.info('⏸️ Escape key pressed - toggle all audio');
-			togglePauseAllAudio();
+			togglePauseAudioPlayback();
 		}
 
 		if (omniMenuOpen === false && metaKey && event.key === 'k') {
@@ -364,10 +473,10 @@
 		}
 
 		if (omniMenuOpen) {
-			if ((metaKey && event.key === 'j') || event.key === 'down') {
+			if ((metaKey && event.key === 'j') || event.key === 'ArrowDown') {
 				event.preventDefault();
 				omniMenuActionFocus('down');
-			} else if ((metaKey && event.key === 'k') || event.key === 'up') {
+			} else if ((metaKey && event.key === 'k') || event.key === 'ArrowUp') {
 				event.preventDefault();
 				omniMenuActionFocus('up');
 			}
@@ -375,9 +484,16 @@
 				event.preventDefault();
 				const activeElement = document.activeElement;
 				if (activeElement === omniMenuInputFieldSearch) {
+					Logger.info(
+						'🔍 Enter key pressed while focus is on input field - focusing first action button'
+					);
+					Logger.info('👀 Filtered actions:', omniMenuFilteredActionsListButtons);
 					// If focus is on input field, focus the first action button
 					if (omniMenuFilteredActionsListButtons.length > 0) {
-						omniMenuFilteredActionsListButtons[0].click();
+						Logger.info('👉 Focusing first action button:', omniMenuFilteredActionsListButtons[0]);
+						omniMenuFilteredActionsListButtons[0].dispatchEvent(
+							new Event('click', { bubbles: true, cancelable: true, composed: false })
+						);
 					}
 					return;
 				}
@@ -386,8 +502,9 @@
 						const action = omniMenuFilteredActions[idx];
 						if (action) {
 							Logger.info('⚡ Triggering omni menu action via Enter key:', action.name);
-							action.action();
-							omniMenuOpen = false;
+							omniMenuFilteredActionsListButtons[idx].dispatchEvent(
+								new Event('click', { bubbles: true, cancelable: true, composed: false })
+							);
 						}
 					}
 				});
@@ -396,7 +513,12 @@
 		}
 
 		if (volumeElement !== null && event.target === volumeElement) {
-			if (event.key === 'j' || event.key === 'h') {
+			if (
+				event.key === 'j' ||
+				event.key === 'h' ||
+				event.key === 'ArrowDown' ||
+				event.key === 'ArrowLeft'
+			) {
 				event.preventDefault();
 				let newValue = parseFloat(volumeElement.value) - 0.05;
 				newValue = Math.max(0, newValue);
@@ -405,7 +527,12 @@
 					new Event('input', { bubbles: true, cancelable: true, composed: false })
 				);
 				return;
-			} else if (event.key === 'k' || event.key === 'l') {
+			} else if (
+				event.key === 'k' ||
+				event.key === 'l' ||
+				event.key === 'ArrowUp' ||
+				event.key === 'ArrowRight'
+			) {
 				event.preventDefault();
 				let newValue = parseFloat(volumeElement.value) + 0.05;
 				newValue = Math.min(1, newValue);
@@ -445,19 +572,24 @@
 		}
 	};
 
+	let globalKeypressListenerAdded = false;
 	const addGlobalKeypressListener = () => {
 		if (!browser) return;
+		if (globalKeypressListenerAdded) return;
 		window.addEventListener('keydown', handleKeypress);
+		globalKeypressListenerAdded = true;
 	};
 
+	let omniMenuActionsAdded = false;
 	const addOmniMenuActions = (): void => {
+		if (omniMenuActionsAdded) return;
 		omniMenuActions = [
 			{
 				name: 'Toggle play/pause',
 				icon: 'pause',
 				description: 'Toggle play/pause for all audio tracks',
 				action: () => {
-					togglePauseAllAudio();
+					togglePauseAudioPlayback();
 				}
 			},
 			{
@@ -474,6 +606,7 @@
 				}
 			}
 		];
+		omniMenuActionsAdded = true;
 	};
 
 	const omniMenuActionTrigger = (evt: Event): void => {
@@ -495,6 +628,7 @@
 			return;
 		}
 		audioPlayersPlaybackStates = audioAssets.map(() => AudioAssetPlaybackState.STOPPED);
+		audioAssetsShouldPlay = audioAssets.map(() => false);
 		addAudioEventListeners();
 		addGlobalKeypressListener();
 		restoreSettings();
