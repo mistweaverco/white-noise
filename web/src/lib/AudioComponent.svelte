@@ -14,6 +14,11 @@
 		action: () => void;
 	}
 
+	interface KeyboardShortcut {
+		keys: string;
+		description: string;
+	}
+
 	let saveSettingsDebounceTimeout: number | undefined;
 	let audioElements: HTMLAudioElement[] = $state([]);
 	let isLoading = $state(true);
@@ -22,6 +27,7 @@
 	let omniMenuFilteredActionsListButtons: HTMLButtonElement[] = $state([]);
 	let omniMenuFilteredActions: OmniMenuAction[] = $state([]);
 	let omniMenuInputFieldSearch: HTMLInputElement | null = $state(null);
+	let keyboardShortcutsOpen = $state(false);
 	let isAudioSupported: boolean | null = $state(null);
 	let audioPlayersPlaybackStates: AudioAssetPlaybackState[] = $state([]);
 	let audioAssetsShouldPlay: boolean[] = $state([]);
@@ -369,6 +375,49 @@
 		return platform.includes('Mac');
 	};
 
+	const keyboardShortcuts = (): KeyboardShortcut[] => [
+		{
+			keys: '?',
+			description: 'Show keyboard shortcuts'
+		},
+		{
+			keys: `${getIsMac() ? '⌘' : 'Ctrl'} + K`,
+			description: 'Open/close omni menu'
+		},
+		{
+			keys: 'Esc',
+			description: 'Toggle play/pause for active sounds'
+		},
+		{
+			keys: 'V',
+			description: 'Focus/unfocus the volume slider'
+		},
+		{
+			keys: 'J / H / ↓ / ←',
+			description: 'Lower volume (while slider is focused)'
+		},
+		{
+			keys: 'K / L / ↑ / →',
+			description: 'Raise volume (while slider is focused)'
+		},
+		{
+			keys: '0-9',
+			description: 'Set volume to 0%-90% (while slider is focused)'
+		},
+		{
+			keys: `${getIsMac() ? '⌘' : 'Ctrl'} + J / ↓`,
+			description: 'Move down in omni menu'
+		},
+		{
+			keys: `${getIsMac() ? '⌘' : 'Ctrl'} + K / ↑`,
+			description: 'Move up in omni menu'
+		},
+		{
+			keys: 'Enter',
+			description: 'Run selected omni menu action'
+		}
+	];
+
 	const togglePauseAudioPlayback = (): void => {
 		if (!browser) return;
 		const activeAssetIdxs: number[] = [];
@@ -434,8 +483,14 @@
 		if (!browser) return;
 		const isMac = getIsMac();
 		const metaKey = isMac ? event.metaKey : event.ctrlKey;
+		const isOmniSearchFocused = document.activeElement === omniMenuInputFieldSearch;
 
 		if (event.key === 'Escape') {
+			if (keyboardShortcutsOpen) {
+				event.preventDefault();
+				keyboardShortcutsOpen = false;
+				return;
+			}
 			if (omniMenuOpen && document.activeElement === omniMenuInputFieldSearch) {
 				event.preventDefault();
 				omniMenuOpen = false;
@@ -469,6 +524,17 @@
 		if (omniMenuOpen === false && metaKey && event.key === 'k') {
 			event.preventDefault();
 			toggleOmniMenu(event);
+			return;
+		}
+
+		if (
+			event.key === '?' &&
+			!isOmniSearchFocused &&
+			!(event.target instanceof HTMLInputElement) &&
+			!(event.target instanceof HTMLTextAreaElement)
+		) {
+			event.preventDefault();
+			keyboardShortcutsOpen = true;
 			return;
 		}
 
@@ -604,6 +670,14 @@
 						Logger.info('🔊 Volume slider is already focused.');
 					}
 				}
+			},
+			{
+				name: 'Show Keyboard Shortcuts',
+				description: 'Open the keyboard shortcuts help popup',
+				icon: 'keyboard',
+				action: () => {
+					keyboardShortcutsOpen = true;
+				}
 			}
 		];
 		omniMenuActionsAdded = true;
@@ -665,11 +739,14 @@
 </script>
 
 <div class="fixed right-20 bottom-5 z-50">
-	<div class="tooltip" data-tip="Omni Menu ({getIsMac() ? '⌘' : 'ctrl'} + k)">
+	<div class="tooltip tooltip-left" data-tip="Keyboard Shortcuts (press ?)">
 		<button
 			class="btn btn-circle btn-sm btn-ghost"
-			onclick={toggleOmniMenu}
-			aria-label="Toggle Omni Menu"
+			onclick={(evt) => {
+				evt.preventDefault();
+				keyboardShortcutsOpen = true;
+			}}
+			aria-label="Show Keyboard Shortcuts"
 		>
 			<span class="fa-solid fa-keyboard"></span>
 		</button>
@@ -704,6 +781,40 @@
 								<div class="text-xs font-semibold uppercase opacity-60">{action.description}</div>
 							</div>
 						</button>
+					</li>
+				{/each}
+			</ul>
+		</div>
+	</div>
+{/if}
+
+{#if keyboardShortcutsOpen}
+	<div
+		class="bg-opacity-50 fixed inset-0 z-40 flex items-center justify-center bg-black"
+		onclick={(event) => {
+			if (event.target === event.currentTarget) {
+				keyboardShortcutsOpen = false;
+			}
+		}}
+	>
+		<div class="bg-base-100 w-[32rem] max-w-[90vw] rounded-lg p-6 shadow-lg">
+			<div class="mb-4 flex items-center justify-between">
+				<h2 class="text-xl font-semibold">Keyboard Shortcuts</h2>
+				<button
+					class="btn btn-circle btn-sm btn-ghost"
+					onclick={() => {
+						keyboardShortcutsOpen = false;
+					}}
+					aria-label="Close shortcuts"
+				>
+					<span class="fa-solid fa-xmark"></span>
+				</button>
+			</div>
+			<ul class="list bg-base-100 rounded-box max-h-80 overflow-y-auto">
+				{#each keyboardShortcuts() as shortcut}
+					<li class="list-row flex items-center justify-between gap-4">
+						<span class="font-mono text-sm">{shortcut.keys}</span>
+						<span class="text-right text-sm opacity-80">{shortcut.description}</span>
 					</li>
 				{/each}
 			</ul>
